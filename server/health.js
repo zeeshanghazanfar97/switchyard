@@ -2,9 +2,18 @@
 // (CORS + private network), so Switchyard does it server-side.
 //
 // Status model:
-//   up       — the upstream answered with a 2xx (or a redirect): reachable.
+//   up       — the upstream answered with a 2xx or a redirect: reachable.
 //   degraded — the upstream answered, but with a 4xx/5xx: reachable but erroring.
 //   down     — no HTTP response at all (connection refused / DNS / timeout).
+//
+// A health check measures *reachability*, not certificate trust. With
+// HEALTH_CHECK_INSECURE_TLS=true (default) a self-signed or hostname-mismatched
+// certificate on an HTTPS upstream — common for LAN services like Proxmox or
+// OPNsense — does not count as "down": the server clearly answered. Traefik's
+// own certificate policy for those backends is configured separately via a
+// serversTransport.
+const http = require('http')
+const https = require('https')
 const config = require('./config')
 const store = require('./yamlStore')
 
@@ -12,36 +21,54 @@ let cache = {}
 let lastCheckedAt = null
 let timer = null
 
-async function checkUrl(url) {
-  const started = Date.now()
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), config.health.timeoutMs)
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      redirect: 'manual',
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Switchyard-HealthCheck' },
-    })
-    const latencyMs = Date.now() - started
-    // Discard the body — we only need the response line.
-    try { if (res.body) await res.body.cancel() } catch (_) { /* ignore */ }
+function checkUrl(url) {
+  return new Promise((resolve) => {
+    let parsed
+    try {
+      parsed = new URL(url)
+    } catch (e) {
+      return resolve({ url, status: 'down', statusCode: null, latencyMs: null, error: 'invalid URL' })
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return resolve({ url, status: 'down', statusCode: null, latencyMs: null, error: 'unsupported protocol' })
+    }
 
-    const code = res.status
-    let status
-    if (res.type === 'opaqueredirect' || (code >= 300 && code < 400)) status = 'up'
-    else if (code >= 200 && code < 300) status = 'up'
-    else status = 'degraded'
-    return { url, status, statusCode: code || null, latencyMs, error: null }
-  } catch (e) {
-    const reason =
-      e.name === 'AbortError' ? 'timeout'
-      : e.cause && e.cause.code ? e.cause.code
-      : e.message
-    return { url, status: 'down', statusCode: null, latencyMs: null, error: reason }
-  } finally {
-    clearTimeout(timeout)
-  }
+    const lib = parsed.protocol === 'https:' ? https : http
+    const started = Date.now()
+    let settled = false
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      resolve({ url, ...result })
+    }
+
+    const req = lib.request(url, {
+      method: 'GET',
+      headers: { 'User-Agent': 'Switchyard-HealthCheck' },
+      // `rejectUnauthorized` is only consulted for HTTPS; harmless for HTTP.
+      rejectUnauthorized: !config.health.insecureTls,
+      timeout: config.health.timeoutMs,
+    }, (res) => {
+      const latencyMs = Date.now() - started
+      res.resume() // drain the body so the socket is released
+      const code = res.statusCode
+      // 2xx and 3xx (a redirect — request() does not follow it) mean the server
+      // answered normally; 4xx/5xx mean it answered with an error.
+      const status = code >= 200 && code < 400 ? 'up' : 'degraded'
+      finish({ status, statusCode: code || null, latencyMs, error: null })
+    })
+
+    req.on('timeout', () => { req.destroy(new Error('timeout')) })
+    req.on('error', (e) => {
+      finish({
+        status: 'down',
+        statusCode: null,
+        latencyMs: null,
+        error: (e && e.code) || (e && e.message) || 'error',
+      })
+    })
+    req.end()
+  })
 }
 
 async function checkServers(servers) {

@@ -98,6 +98,7 @@ All configuration is via environment variables loaded from `.env`. Copy
 | --- | --- | --- |
 | `HEALTH_CHECK_INTERVAL` | `30000` | Milliseconds between background health sweeps. |
 | `HEALTH_CHECK_TIMEOUT` | `5000` | Per-request timeout in milliseconds. |
+| `HEALTH_CHECK_INSECURE_TLS` | `true` | Accept untrusted/self-signed TLS certificates on HTTPS upstreams. |
 
 ### Docker & Traefik integration
 
@@ -222,6 +223,11 @@ For every service, Switchyard sends an HTTP request to each upstream server:
 - **up** — responded with `2xx` (or a redirect)
 - **degraded** — responded, but with `4xx`/`5xx`
 - **unreachable** — no response (connection refused, DNS failure, timeout)
+
+Each upstream server is probed directly. A health check measures reachability,
+not certificate trust — self-signed or untrusted TLS certificates are accepted
+by default (`HEALTH_CHECK_INSECURE_TLS`), since a certificate error still proves
+the server answered.
 
 Results refresh on an interval (`HEALTH_CHECK_INTERVAL`) and on demand via the
 **Recheck** button.

@@ -44,6 +44,9 @@ const config = {
   health: {
     intervalMs: int(process.env.HEALTH_CHECK_INTERVAL, 30000),
     timeoutMs: int(process.env.HEALTH_CHECK_TIMEOUT, 5000),
+    // A health check measures reachability, not certificate trust. Defaults to
+    // accepting self-signed / untrusted certs on HTTPS upstreams.
+    insecureTls: bool(process.env.HEALTH_CHECK_INSECURE_TLS, true),
   },
 }
 

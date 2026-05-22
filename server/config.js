@@ -12,10 +12,16 @@ function int(value, fallback) {
   return Number.isFinite(n) ? n : fallback
 }
 
+const nodeEnv = process.env.NODE_ENV || 'development'
+
 const config = {
   port: int(process.env.PORT, 8080),
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   sessionSecret: process.env.SESSION_SECRET || 'switchyard-dev-insecure-secret',
+
+  // Send the session cookie over HTTPS only. Defaults to on in production;
+  // set SECURE_COOKIES=false when Switchyard is served over plain HTTP.
+  secureCookies: bool(process.env.SECURE_COOKIES, nodeEnv === 'production'),
 
   // Absolute path to the Traefik dynamic config file Switchyard edits.
   dynamicFile: path.resolve(process.env.TRAEFIK_DYNAMIC_FILE || './data/dynamic.yml'),

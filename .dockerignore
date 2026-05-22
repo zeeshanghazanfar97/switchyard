@@ -1,0 +1,24 @@
+# Dependencies — reinstalled inside the image
+node_modules
+**/node_modules
+
+# Build output — regenerated inside the image
+client/dist
+
+# Secrets and local config — provided at runtime via compose
+.env
+
+# Sample data — bind-mounted as a volume at runtime, not baked into the image
+data
+
+# VCS and tooling
+.git
+.gitignore
+.claude
+*.log
+.DS_Store
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore

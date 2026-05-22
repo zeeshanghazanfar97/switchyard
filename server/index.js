@@ -18,7 +18,7 @@ app.use(cookieSession({
   maxAge: 7 * 24 * 60 * 60 * 1000,
   httpOnly: true,
   sameSite: 'lax',
-  secure: config.nodeEnv === 'production',
+  secure: config.secureCookies,
 }))
 
 app.use('/api/auth', require('./routes/auth'))

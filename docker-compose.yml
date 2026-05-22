@@ -1,0 +1,67 @@
+# Switchyard — Traefik dynamic config editor.
+#
+# Standalone:
+#   cp .env.example .env          # set ADMIN_PASSWORD, SESSION_SECRET, …
+#   docker compose up -d --build
+#   open http://localhost:8080
+#
+# Behind Traefik:
+#   In .env set TRAEFIK_ENABLE=true plus TRAEFIK_NETWORK, SWITCHYARD_HOST,
+#   TRAEFIK_ENTRYPOINTS, TRAEFIK_CERTRESOLVER (and SECURE_COOKIES=true for TLS),
+#   then deploy the same way. The Traefik labels below are filled in from .env.
+
+services:
+  switchyard:
+    build: .
+    image: switchyard:latest
+    container_name: switchyard
+    restart: unless-stopped
+
+    # All variables from .env (credentials, OIDC/SSO, health checks, Traefik).
+    env_file:
+      - .env
+    # Container-internal overrides — these take precedence over .env.
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      TRAEFIK_DYNAMIC_FILE: /data/dynamic.yml
+
+    # Host port (.env PORT, default 8080) -> container 8080. When Switchyard is
+    # reached only through Traefik, you may comment this out.
+    ports:
+      - "${PORT:-8080}:8080"
+
+    # Mount the DIRECTORY holding the Traefik dynamic config file. Switchyard
+    # writes atomically (temp file + rename), so the whole directory must be
+    # mounted — not a single file.
+    volumes:
+      - ${TRAEFIK_DYNAMIC_DIR:-./data}:/data
+
+    networks:
+      - default
+      - traefik
+
+    # Traefik reverse-proxy registration. Every value is taken from .env, so the
+    # routing is configured before deployment without editing this file. When
+    # TRAEFIK_ENABLE is not "true", Traefik ignores every label below.
+    labels:
+      - "traefik.enable=${TRAEFIK_ENABLE:-false}"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}"
+      - "traefik.http.routers.switchyard.rule=Host(`${SWITCHYARD_HOST:-switchyard.example.com}`)"
+      - "traefik.http.routers.switchyard.entrypoints=${TRAEFIK_ENTRYPOINTS:-websecure}"
+      - "traefik.http.routers.switchyard.tls.certresolver=${TRAEFIK_CERTRESOLVER:-}"
+      - "traefik.http.services.switchyard.loadbalancer.server.port=8080"
+
+    # Runs as root by default so it can write root-owned Traefik config files.
+    # To drop privileges, uncomment and ensure /data is writable by that uid:gid.
+    # user: "1000:1000"
+
+networks:
+  # The container's own bridge network — outbound traffic and health checks.
+  default:
+  # Network shared with Traefik. With TRAEFIK_ENABLE=true this must already
+  # exist as an external network named ${TRAEFIK_NETWORK}; with TRAEFIK_ENABLE=
+  # false, Compose just creates a local network of that name.
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik-public}
+    external: ${TRAEFIK_ENABLE:-false}

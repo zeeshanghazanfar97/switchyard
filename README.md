@@ -14,8 +14,14 @@ effect immediately.
 
 ## Features
 
-- **3-pane workbench** for routers, services and middlewares — create, edit and
-  delete each entity, drag-to-attach middlewares, type-aware middleware config.
+- **Workbench** for routers, services, middlewares and server transports —
+  create, edit and delete each entity, drag-to-attach middlewares, type-aware
+  middleware config.
+- **Server transports** — manage `serversTransports` for HTTPS backends. One
+  click attaches a verification-skipping transport to a service whose upstream
+  uses a self-signed certificate (Proxmox, OPNsense, …).
+- **Enable / disable** routers and services without deleting them — disabled
+  entries are commented out in `dynamic.yml` and re-read on load.
 - **Live health checks** — the server probes every service's upstream servers
   over HTTP and reports `reachable` / `degraded` / `unreachable`.
 - **Raw YAML view** — read, copy, export, import and round-trip-edit the file.
@@ -203,6 +209,10 @@ http:
 
 Pressing **Apply changes** writes the file atomically; Traefik detects the change
 and hot-reloads. See `data/dynamic.yml` for a complete sample.
+
+Disabled routers and services are written as a commented-out, fenced block at
+the end of the file — Traefik ignores them, while Switchyard re-reads the block
+so the definitions survive until you re-enable them.
 
 ## Health checks
 

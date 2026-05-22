@@ -1,6 +1,5 @@
 // Config routes: read/write the Traefik dynamic file and parse pasted YAML.
 const express = require('express')
-const yaml = require('js-yaml')
 const { requireAuth } = require('../auth')
 const store = require('../yamlStore')
 const health = require('../health')
@@ -23,14 +22,14 @@ router.get('/', async (req, res) => {
 })
 
 router.put('/', async (req, res) => {
-  const { routers, services, middlewares } = req.body || {}
-  if (![routers, services, middlewares].every(Array.isArray)) {
+  const { routers, services, middlewares, serversTransports } = req.body || {}
+  if (![routers, services, middlewares, serversTransports].every(Array.isArray)) {
     return res.status(400).json({
-      error: 'Payload must include routers, services and middlewares arrays.',
+      error: 'Payload must include routers, services, middlewares and serversTransports arrays.',
     })
   }
   try {
-    await store.write({ routers, services, middlewares })
+    await store.write({ routers, services, middlewares, serversTransports })
     lastSavedBy = req.session.user.name
     const state = await store.read()
     state.meta.lastModifiedBy = lastSavedBy
@@ -43,22 +42,16 @@ router.put('/', async (req, res) => {
 })
 
 // Parse raw YAML text into editor state (used by Import and raw editing).
-// Does not write anything to disk.
+// Recovers disabled entries from the fenced comment block; writes nothing.
 router.post('/parse', (req, res) => {
   const text = req.body && req.body.yaml
   if (typeof text !== 'string') {
     return res.status(400).json({ error: 'Expected a JSON body of the form { "yaml": "..." }.' })
   }
-  let doc
   try {
-    doc = yaml.load(text)
+    res.json(store.parseConfig(text))
   } catch (e) {
-    return res.status(422).json({ error: 'YAML parse error: ' + e.message })
-  }
-  try {
-    res.json(store.fromTraefik(doc || {}))
-  } catch (e) {
-    res.status(422).json({ error: 'Not a valid Traefik dynamic config: ' + e.message })
+    res.status(422).json({ error: 'YAML parse error: ' + e.message })
   }
 })
 

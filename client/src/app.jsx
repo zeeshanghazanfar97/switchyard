@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from './icons.jsx'
 import { Spinner } from './primitives.jsx'
 import { Login } from './login.jsx'
-import { RoutersView, ServicesView, MiddlewaresView } from './entities.jsx'
+import { RoutersView, ServicesView, MiddlewaresView, TransportsView } from './entities.jsx'
 import { YamlView } from './yaml-view.jsx'
 import { TweaksPanel, TweakSection, TweakRadio, useTweaks } from './tweaks-panel.jsx'
 import { api } from './api.js'
@@ -14,7 +14,10 @@ const NAV_ITEMS = [
   { id: 'routers', icon: 'router', label: 'Routers' },
   { id: 'services', icon: 'service', label: 'Services' },
   { id: 'middlewares', icon: 'middleware', label: 'Middlewares' },
+  { id: 'serversTransports', icon: 'shield', label: 'Transports' },
 ]
+
+const COLLECTIONS = ['routers', 'services', 'middlewares', 'serversTransports']
 
 function clone(x) {
   return x ? JSON.parse(JSON.stringify(x)) : x
@@ -24,7 +27,7 @@ function clone(x) {
 function diffCount(base, cur) {
   if (!base || !cur) return 0
   let n = 0
-  for (const kind of ['routers', 'services', 'middlewares']) {
+  for (const kind of COLLECTIONS) {
     const b = base[kind] || []
     const c = cur[kind] || []
     const byId = {}
@@ -58,7 +61,7 @@ export function App() {
   const [loadError, setLoadError] = React.useState(null)
   const [saving, setSaving] = React.useState(false)
   const [notice, setNotice] = React.useState(null) // { ok } | { error }
-  const [selection, setSelection] = React.useState({ routers: null, services: null, middlewares: null })
+  const [selection, setSelection] = React.useState({ routers: null, services: null, middlewares: null, serversTransports: null })
 
   // Apply theme + density + font onto <html> so the CSS vars cascade.
   React.useEffect(() => {
@@ -107,7 +110,12 @@ export function App() {
     if (!state) return
     setSaving(true)
     setNotice(null)
-    const snap = { routers: state.routers, services: state.services, middlewares: state.middlewares }
+    const snap = {
+      routers: state.routers,
+      services: state.services,
+      middlewares: state.middlewares,
+      serversTransports: state.serversTransports,
+    }
     try {
       const resp = await api.saveConfig(snap)
       setState((s) => ({ ...s, meta: resp.meta }))
@@ -128,7 +136,13 @@ export function App() {
   }, [])
 
   const replaceConfig = React.useCallback((cfg) => {
-    setState((s) => ({ ...s, routers: cfg.routers, services: cfg.services, middlewares: cfg.middlewares }))
+    setState((s) => ({
+      ...s,
+      routers: cfg.routers,
+      services: cfg.services,
+      middlewares: cfg.middlewares,
+      serversTransports: cfg.serversTransports,
+    }))
   }, [])
 
   const recheck = React.useCallback(async (name, urls) => {
@@ -189,6 +203,14 @@ export function App() {
         state={state} setState={setState}
         selectedId={selection.middlewares} setSelectedId={selectFor('middlewares')}
         onSave={handleSave} saving={saving}
+      />
+    )
+  } else if (route === 'serversTransports') {
+    mainContent = (
+      <TransportsView
+        state={state} setState={setState}
+        selectedId={selection.serversTransports} setSelectedId={selectFor('serversTransports')}
+        onSave={handleSave} saving={saving} openEntity={openEntity}
       />
     )
   } else if (route === 'yaml') {

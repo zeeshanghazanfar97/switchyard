@@ -37,6 +37,7 @@ export function Icon({ name, size = 16, strokeWidth = 1.6, style }) {
     drag: <><circle cx="9" cy="6" r="1.2" fill="currentColor" /><circle cx="9" cy="12" r="1.2" fill="currentColor" /><circle cx="9" cy="18" r="1.2" fill="currentColor" /><circle cx="15" cy="6" r="1.2" fill="currentColor" /><circle cx="15" cy="12" r="1.2" fill="currentColor" /><circle cx="15" cy="18" r="1.2" fill="currentColor" /></>,
     link: <><path {...p} d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path {...p} d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></>,
     bolt: <><path {...p} d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" /></>,
+    power: <><path {...p} d="M12 3v9" /><path {...p} d="M18.4 6.6a9 9 0 1 1-12.8 0" /></>,
     alert: <><path {...p} d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path {...p} d="M12 9v4M12 17h.01" /></>,
     info: <><circle {...p} cx="12" cy="12" r="10" /><path {...p} d="M12 16v-4M12 8h.01" /></>,
     refresh: <><path {...p} d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path {...p} d="M21 3v5h-5" /></>,

@@ -1,5 +1,5 @@
-// Routers, Services, Middlewares views.
-// All three follow the same SplitPane (list | editor) pattern using primitives.
+// Routers, Services, Middlewares and Transports views.
+// All follow the same SplitPane (list | editor) pattern using primitives.
 import React from 'react'
 import { Icon } from './icons.jsx'
 import { Yaml, timeAgo } from './yaml-utils.js'
@@ -48,6 +48,8 @@ function freshId(prefix, items) {
   return `${prefix}-${n}`
 }
 
+const isEnabled = (e) => e.enabled !== false
+
 // Health lookups against the live health map keyed by service name.
 function healthOf(health, name) {
   return (health && health[name]) || null
@@ -82,6 +84,20 @@ function HealthDot({ status, withLabel, latencyMs }) {
   )
 }
 
+// Small "off" badge for disabled entities in list rows.
+function OffPill() {
+  return <span className="pill" style={{ height: 18, padding: '0 5px', fontSize: 10 }}>off</span>
+}
+
+// Editor toggle button for enabling/disabling an entity.
+function EnableButton({ entity, onToggle }) {
+  return (
+    <button className="btn ghost sm" onClick={() => onToggle(entity)}>
+      <Icon name="power" size={13} /> {isEnabled(entity) ? 'Disable' : 'Enable'}
+    </button>
+  )
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTERS
 // ════════════════════════════════════════════════════════════════════════════
@@ -110,13 +126,16 @@ export function RoutersView({ state, setState, selectedId, setSelectedId, health
     const fresh = {
       id, name: id, rule: 'Host(`new.example.com`)',
       entryPoints: ['websecure'], service: state.services[0]?.name || '',
-      middlewares: [], tls: { certResolver: 'cloudflare' }, priority: null,
+      middlewares: [], tls: { certResolver: 'cloudflare' }, priority: null, enabled: true,
     }
     setState((s) => ({ ...s, routers: [...s.routers, fresh] }))
     setSelectedId(id)
   }
   const remove = () => {
     setState((s) => ({ ...s, routers: s.routers.filter((r) => r.id !== selectedId) }))
+  }
+  const toggleEnabled = (r) => {
+    setState((s) => ({ ...s, routers: s.routers.map((x) => (x.id === r.id ? { ...x, enabled: x.enabled === false } : x)) }))
   }
 
   return (
@@ -126,7 +145,7 @@ export function RoutersView({ state, setState, selectedId, setSelectedId, health
         count={state.routers.length}
         search={search} setSearch={setSearch}
         onAdd={add} addLabel="New router"
-        footer={`${state.routers.length} total · ${state.routers.filter((r) => r.tls).length} TLS`}
+        footer={`${state.routers.length} total · ${state.routers.filter((r) => isEnabled(r)).length} enabled`}
       >
         {filtered.map((r) => {
           const svc = state.services.find((s) => s.name === r.service)
@@ -134,14 +153,16 @@ export function RoutersView({ state, setState, selectedId, setSelectedId, health
             <ListRow
               key={r.id}
               active={r.id === selectedId}
+              dimmed={!isEnabled(r)}
               onClick={() => setSelectedId(r.id)}
               icon={<Icon name="router" size={14} />}
               label={r.name}
               sub={r.rule.replace(/`/g, '')}
               status={
-                <span style={{ display: 'flex', gap: 4 }}>
+                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {!isEnabled(r) && <OffPill />}
                   {r.tls && <span className="pill accent" title="TLS enabled" style={{ height: 18, padding: '0 5px', fontSize: 10 }}>TLS</span>}
-                  {svc && <HealthDot status={statusOf(health, svc.name)} />}
+                  {svc && isEnabled(r) && <HealthDot status={statusOf(health, svc.name)} />}
                 </span>
               }
             />
@@ -157,21 +178,23 @@ export function RoutersView({ state, setState, selectedId, setSelectedId, health
 
       {current
         ? <RouterEditor router={current} state={state} update={update} remove={remove}
-                        health={health} onSave={onSave} saving={saving} openEntity={openEntity} />
-        : <EditorEmpty kind="router" onAdd={add} />}
+                        health={health} onSave={onSave} saving={saving} openEntity={openEntity}
+                        onToggleEnabled={toggleEnabled} />
+        : <EditorEmpty icon="router" label="router" onAdd={add} />}
     </SplitPane>
   )
 }
 
-function RouterEditor({ router, state, update, remove, health, onSave, saving, openEntity }) {
+function RouterEditor({ router, state, update, remove, health, onSave, saving, openEntity, onToggleEnabled }) {
   const [dragOver, setDragOver] = React.useState(false)
+  const disabled = !isEnabled(router)
 
   const issues = []
+  if (disabled) issues.push({ level: 'info', message: 'This router is disabled — commented out in dynamic.yml and ignored by Traefik.' })
   const targetService = state.services.find((s) => s.name === router.service)
   if (!targetService) issues.push({ level: 'error', message: `Service "${router.service}" does not exist.` })
-  else if (statusOf(health, targetService.name) === 'down') {
-    issues.push({ level: 'warn', message: `Target service "${targetService.name}" is unreachable.` })
-  }
+  else if (!disabled && !isEnabled(targetService)) issues.push({ level: 'error', message: `Target service "${targetService.name}" is disabled.` })
+  else if (!disabled && statusOf(health, targetService.name) === 'down') issues.push({ level: 'warn', message: `Target service "${targetService.name}" is unreachable.` })
   if (!router.rule.trim()) issues.push({ level: 'error', message: 'Rule cannot be empty.' })
   for (const m of router.middlewares || []) {
     if (!state.middlewares.find((mw) => mw.name === m)) {
@@ -197,12 +220,14 @@ function RouterEditor({ router, state, update, remove, health, onSave, saving, o
       name={router.name}
       namePill={
         <span style={{ display: 'flex', gap: 6 }}>
+          {disabled && <span className="pill">disabled</span>}
           {router.tls && <span className="pill accent">TLS</span>}
-          {targetService && <HealthDot status={statusOf(health, targetService.name)} withLabel latencyMs={healthOf(health, targetService.name)?.latencyMs} />}
+          {targetService && !disabled && <HealthDot status={statusOf(health, targetService.name)} withLabel latencyMs={healthOf(health, targetService.name)?.latencyMs} />}
         </span>
       }
       actions={
         <>
+          <EnableButton entity={router} onToggle={onToggleEnabled} />
           <button className="btn ghost sm danger" onClick={() => { if (confirm(`Delete router "${router.name}"?`)) remove() }}>
             <Icon name="trash" size={13} /> Delete
           </button>
@@ -254,7 +279,7 @@ function RouterEditor({ router, state, update, remove, health, onSave, saving, o
             <select className="input mono" value={router.service} onChange={(e) => update({ service: e.target.value })} style={{ flex: 1 }}>
               <option value="">— select —</option>
               {state.services.map((s) => (
-                <option key={s.id} value={s.name}>{s.name} ({s.servers.length} server{s.servers.length === 1 ? '' : 's'})</option>
+                <option key={s.id} value={s.name}>{s.name} ({s.servers.length} server{s.servers.length === 1 ? '' : 's'}){isEnabled(s) ? '' : ' — disabled'}</option>
               ))}
             </select>
             {targetService && targetService.servers[0] && (
@@ -371,12 +396,57 @@ export function ServicesView({ state, setState, selectedId, setSelectedId, healt
   const update = (patch) => setState((s) => ({ ...s, services: s.services.map((x) => (x.id === selectedId ? { ...x, ...patch } : x)) }))
   const add = () => {
     const id = freshId('service', state.services)
-    setState((s) => ({ ...s, services: [...s.services, { id, name: id, type: 'loadBalancer', servers: [{ url: 'http://10.1.1.1:8080' }], passHostHeader: true, sticky: null }] }))
+    setState((s) => ({ ...s, services: [...s.services, { id, name: id, type: 'loadBalancer', servers: [{ url: 'http://10.1.1.1:8080' }], passHostHeader: true, sticky: null, serversTransport: null, enabled: true }] }))
     setSelectedId(id)
   }
   const remove = () => setState((s) => ({ ...s, services: s.services.filter((x) => x.id !== selectedId) }))
 
-  const countBy = (st) => state.services.filter((s) => statusOf(health, s.name) === st).length
+  // Disabling a service cascades to the routers that depend on it (a router
+  // pointing at a commented-out service would break). Enabling does not cascade.
+  const toggleEnabled = (svc) => {
+    if (!isEnabled(svc)) {
+      setState((s) => ({ ...s, services: s.services.map((x) => (x.id === svc.id ? { ...x, enabled: true } : x)) }))
+      return
+    }
+    const deps = state.routers.filter((r) => r.service === svc.name && isEnabled(r))
+    if (deps.length) {
+      const ok = confirm(
+        `Disable service "${svc.name}"?\n\n`
+        + `${deps.length} router(s) route to it and will be disabled too — otherwise they would break:\n`
+        + deps.map((r) => `· ${r.name}`).join('\n'),
+      )
+      if (!ok) return
+    }
+    const depIds = new Set(deps.map((r) => r.id))
+    setState((s) => ({
+      ...s,
+      services: s.services.map((x) => (x.id === svc.id ? { ...x, enabled: false } : x)),
+      routers: s.routers.map((r) => (depIds.has(r.id) ? { ...r, enabled: false } : r)),
+    }))
+  }
+
+  // One-click fix for HTTPS upstreams: ensure an insecure transport exists and
+  // attach it to the service.
+  const attachInsecureTransport = (svc) => {
+    setState((s) => {
+      let transports = s.serversTransports
+      let t = transports.find((x) => x.config && x.config.insecureSkipVerify === true)
+      if (!t) {
+        let name = 'insecure-https'
+        let n = 2
+        while (transports.find((x) => x.name === name)) name = `insecure-https-${n++}`
+        t = { id: name, name, config: { insecureSkipVerify: true } }
+        transports = [...transports, t]
+      }
+      return {
+        ...s,
+        serversTransports: transports,
+        services: s.services.map((x) => (x.id === svc.id ? { ...x, serversTransport: t.name } : x)),
+      }
+    })
+  }
+
+  const countBy = (st) => state.services.filter((s) => isEnabled(s) && statusOf(health, s.name) === st).length
 
   return (
     <SplitPane>
@@ -393,11 +463,17 @@ export function ServicesView({ state, setState, selectedId, setSelectedId, healt
             <ListRow
               key={s.id}
               active={s.id === selectedId}
+              dimmed={!isEnabled(s)}
               onClick={() => setSelectedId(s.id)}
               icon={<Icon name="service" size={14} />}
               label={s.name}
               sub={`${s.servers.length} server${s.servers.length === 1 ? '' : 's'}${referencing === 0 ? ' · orphan' : ` · ${referencing} router${referencing === 1 ? '' : 's'}`}`}
-              status={<HealthDot status={statusOf(health, s.name)} />}
+              status={
+                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {!isEnabled(s) && <OffPill />}
+                  {isEnabled(s) && <HealthDot status={statusOf(health, s.name)} />}
+                </span>
+              }
             />
           )
         })}
@@ -405,25 +481,39 @@ export function ServicesView({ state, setState, selectedId, setSelectedId, healt
 
       {current
         ? <ServiceEditor service={current} state={state} update={update} remove={remove}
-                         health={health} onSave={onSave} saving={saving} onRecheck={onRecheck} />
-        : <EditorEmpty kind="service" onAdd={add} />}
+                         health={health} onSave={onSave} saving={saving} onRecheck={onRecheck}
+                         onToggleEnabled={toggleEnabled} onAttachInsecureTransport={attachInsecureTransport} />
+        : <EditorEmpty icon="service" label="service" onAdd={add} />}
     </SplitPane>
   )
 }
 
-function ServiceEditor({ service, state, update, remove, health, onSave, saving, onRecheck }) {
+function ServiceEditor({ service, state, update, remove, health, onSave, saving, onRecheck, onToggleEnabled, onAttachInsecureTransport }) {
   const [rechecking, setRechecking] = React.useState(false)
+  const disabled = !isEnabled(service)
   const referencing = state.routers.filter((r) => r.service === service.name)
   const svcHealth = healthOf(health, service.name)
   const status = statusOf(health, service.name)
+  const httpsUpstream = service.servers.some((sv) => /^https:\/\//i.test(sv.url || ''))
 
   const issues = []
+  if (disabled) issues.push({ level: 'info', message: 'This service is disabled — commented out in dynamic.yml and ignored by Traefik.' })
   if (service.servers.length === 0) issues.push({ level: 'error', message: 'Service has no backend servers.' })
   if (referencing.length === 0) issues.push({ level: 'warn', message: `No router references "${service.name}". This service is orphaned.` })
   for (const srv of service.servers) {
     if (!/^https?:\/\//.test(srv.url)) issues.push({ level: 'error', message: `Server URL "${srv.url}" is invalid.` })
   }
-  if (status === 'down') {
+  if (service.serversTransport && !state.serversTransports.find((t) => t.name === service.serversTransport)) {
+    issues.push({ level: 'error', message: `Server transport "${service.serversTransport}" is not defined.` })
+  }
+  if (httpsUpstream && !service.serversTransport) {
+    issues.push({
+      level: 'info',
+      message: 'HTTPS upstream — if the backend uses a self-signed or hostname-mismatched certificate, attach a server transport that skips TLS verification.',
+      action: { label: 'Add insecure transport', onClick: () => onAttachInsecureTransport(service) },
+    })
+  }
+  if (!disabled && status === 'down') {
     const failed = svcHealth && svcHealth.servers && svcHealth.servers.find((x) => x.status === 'down')
     issues.push({ level: 'error', message: `Upstream is not responding${failed && failed.error ? ` (${failed.error})` : ''}.` })
   }
@@ -455,12 +545,18 @@ function ServiceEditor({ service, state, update, remove, health, onSave, saving,
       kind="service"
       breadcrumbs={['http', 'services']}
       name={service.name}
-      namePill={<HealthDot status={status} withLabel latencyMs={svcHealth?.latencyMs} />}
+      namePill={
+        <span style={{ display: 'flex', gap: 6 }}>
+          {disabled && <span className="pill">disabled</span>}
+          {!disabled && <HealthDot status={status} withLabel latencyMs={svcHealth?.latencyMs} />}
+        </span>
+      }
       actions={
         <>
           <button className="btn ghost sm" onClick={handleRecheck} disabled={rechecking}>
             {rechecking ? <Spinner /> : <Icon name="refresh" size={13} />} Recheck
           </button>
+          <EnableButton entity={service} onToggle={onToggleEnabled} />
           <button className="btn ghost sm danger" onClick={() => { if (confirm(`Delete service "${service.name}"?`)) remove() }}>
             <Icon name="trash" size={13} /> Delete
           </button>
@@ -504,7 +600,7 @@ function ServiceEditor({ service, state, update, remove, health, onSave, saving,
                 padding: 8, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6,
               }}>
                 <span style={{ width: 22, height: 22, borderRadius: 4, display: 'grid', placeItems: 'center', background: 'var(--panel)', color: 'var(--muted)', fontSize: 11 }} className="mono">{i + 1}</span>
-                <input className="input mono" value={srv.url} onChange={(e) => updateServer(i, { url: e.target.value })} placeholder="http://10.1.1.1:8080" />
+                <input className="input mono" value={srv.url} onChange={(e) => updateServer(i, { url: e.target.value })} placeholder="https://10.1.1.1" />
                 <span title={serverTip(sh)}><HealthDot status={sh.status} /></span>
                 <button className="btn ghost icon sm danger" onClick={() => removeServer(i)} disabled={service.servers.length === 1}>
                   <Icon name="trash" size={12} />
@@ -513,6 +609,20 @@ function ServiceEditor({ service, state, update, remove, health, onSave, saving,
             )
           })}
         </div>
+      </Section>
+
+      <Section title="Backend transport"
+        hint="How Traefik connects to the upstream. HTTPS backends with self-signed certificates need a transport that skips TLS verification.">
+        <Field label="Server transport" hint="Defined under Transports. Maps to loadBalancer.serversTransport.">
+          <select className="input mono" value={service.serversTransport || ''} onChange={(e) => update({ serversTransport: e.target.value || null })}>
+            <option value="">— none (default, verifies TLS) —</option>
+            {state.serversTransports.map((t) => (
+              <option key={t.id} value={t.name}>
+                {t.name}{t.config && t.config.insecureSkipVerify ? ' (skips TLS verify)' : ''}
+              </option>
+            ))}
+          </select>
+        </Field>
       </Section>
 
       <Section title="Options">
@@ -594,7 +704,7 @@ export function MiddlewaresView({ state, setState, selectedId, setSelectedId, on
 
       {current
         ? <MiddlewareEditor middleware={current} state={state} update={update} remove={remove} onSave={onSave} saving={saving} />
-        : <EditorEmpty kind="middleware" onAdd={add} />}
+        : <EditorEmpty icon="middleware" label="middleware" onAdd={add} />}
     </SplitPane>
   )
 }
@@ -746,20 +856,159 @@ function MiddlewareConfigForm({ middleware, update }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// SERVER TRANSPORTS
+// ════════════════════════════════════════════════════════════════════════════
+export function TransportsView({ state, setState, selectedId, setSelectedId, onSave, saving, openEntity }) {
+  const [search, setSearch] = React.useState('')
+  const filtered = state.serversTransports.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
+
+  React.useEffect(() => {
+    if (!state.serversTransports.find((t) => t.id === selectedId) && state.serversTransports.length) {
+      setSelectedId(state.serversTransports[0].id)
+    }
+  }, [state.serversTransports, selectedId])
+
+  const current = state.serversTransports.find((t) => t.id === selectedId)
+  const update = (patch) => setState((s) => ({ ...s, serversTransports: s.serversTransports.map((x) => (x.id === selectedId ? { ...x, ...patch } : x)) }))
+  const add = () => {
+    const id = freshId('transport', state.serversTransports)
+    setState((s) => ({ ...s, serversTransports: [...s.serversTransports, { id, name: id, config: { insecureSkipVerify: true } }] }))
+    setSelectedId(id)
+  }
+  const remove = () => setState((s) => ({ ...s, serversTransports: s.serversTransports.filter((x) => x.id !== selectedId) }))
+
+  return (
+    <SplitPane>
+      <ListPane
+        title="Transports"
+        count={state.serversTransports.length}
+        search={search} setSearch={setSearch}
+        onAdd={add} addLabel="New transport"
+        footer={`${state.serversTransports.length} defined`}
+      >
+        {filtered.map((t) => {
+          const usage = state.services.filter((s) => s.serversTransport === t.name).length
+          return (
+            <ListRow
+              key={t.id}
+              active={t.id === selectedId}
+              onClick={() => setSelectedId(t.id)}
+              icon={<Icon name="shield" size={14} />}
+              label={t.name}
+              sub={`${t.config && t.config.insecureSkipVerify ? 'skips TLS verify' : 'verifies TLS'} · used by ${usage} service${usage === 1 ? '' : 's'}`}
+              status={usage === 0 ? <span className="pill warn" style={{ height: 18, padding: '0 5px', fontSize: 10 }}>unused</span> : null}
+            />
+          )
+        })}
+        {filtered.length === 0 && state.serversTransports.length > 0 && (
+          <div className="empty" style={{ padding: 32 }}>
+            <Icon name="search" size={20} style={{ color: 'var(--faint)' }} />
+            <div>No transports match "{search}"</div>
+          </div>
+        )}
+      </ListPane>
+
+      {current
+        ? <TransportEditor transport={current} state={state} update={update} remove={remove} onSave={onSave} saving={saving} openEntity={openEntity} />
+        : <EditorEmpty icon="shield" label="transport" onAdd={add} />}
+    </SplitPane>
+  )
+}
+
+function TransportEditor({ transport, state, update, remove, onSave, saving, openEntity }) {
+  const cfg = transport.config || {}
+  const usage = state.services.filter((s) => s.serversTransport === transport.name)
+  const issues = []
+  if (usage.length === 0) issues.push({ level: 'warn', message: 'This transport is not attached to any service.' })
+
+  const setCfg = (key, value) => {
+    const next = { ...cfg }
+    if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) delete next[key]
+    else next[key] = value
+    update({ config: next })
+  }
+
+  const snippet = Yaml.buildTransportSnippet(transport)
+
+  return (
+    <EditorShell
+      kind="serversTransports"
+      breadcrumbs={['http', 'serversTransports']}
+      name={transport.name}
+      namePill={cfg.insecureSkipVerify
+        ? <span className="pill warn">insecure</span>
+        : <span className="pill ok">verified</span>}
+      actions={
+        <>
+          <button className="btn ghost sm danger" onClick={() => { if (confirm(`Delete transport "${transport.name}"?`)) remove() }}>
+            <Icon name="trash" size={13} /> Delete
+          </button>
+          <button className="btn primary sm" onClick={onSave} disabled={saving}>
+            {saving ? <Spinner dark /> : <><Icon name="save" size={13} /> Save changes</>}
+          </button>
+        </>
+      }
+      validationIssues={issues}
+      footer={
+        <>
+          <span>{usage.length === 0 ? 'Not in use' : `Attached to ${usage.map((s) => s.name).join(', ')}`}</span>
+          <span className="mono">http.serversTransports.{transport.name}</span>
+        </>
+      }
+    >
+      <Section title="Identity">
+        <Field label="Name" hint="Referenced by a service's “Server transport” field.">
+          <input className="input mono" value={transport.name} onChange={(e) => update({ name: e.target.value })} />
+        </Field>
+      </Section>
+
+      <Section title="Backend TLS" hint="Controls how Traefik trusts the upstream server's TLS certificate.">
+        <Toggle
+          value={!!cfg.insecureSkipVerify}
+          onChange={(v) => setCfg('insecureSkipVerify', v)}
+          label="Skip TLS certificate verification"
+          hint="Accept any certificate from the backend. Use for self-signed LAN services (Proxmox, OPNsense…). Prefer Root CAs for production." />
+        <Field label="Server name (SNI)" hint="Expected certificate name. Leave empty to use the request host.">
+          <input className="input mono" value={cfg.serverName || ''} placeholder="—"
+                 onChange={(e) => setCfg('serverName', e.target.value)} />
+        </Field>
+        <Field label="Root CAs" hint="Paths to CA certificate files Traefik should trust — an alternative to skipping verification.">
+          <TagInput value={cfg.rootCAs || []} onChange={(v) => setCfg('rootCAs', v)} placeholder="/certs/internal-ca.pem" />
+        </Field>
+      </Section>
+
+      <Section title="Used by" hint={usage.length === 0 ? 'No services reference this transport yet.' : null}>
+        {usage.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {usage.map((s) => (
+              <button key={s.id} className="pill" style={{ height: 22, cursor: 'pointer' }} onClick={() => openEntity('services', s.id)}>
+                <Icon name="service" size={11} style={{ color: 'var(--info)' }} /> {s.name}
+              </button>
+            ))}
+          </div>
+        ) : <span style={{ fontSize: 12, color: 'var(--faint)' }}>Set a service's “Server transport” to this one.</span>}
+      </Section>
+
+      <YamlPreview snippet={snippet} />
+    </EditorShell>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // EMPTY STATE
 // ════════════════════════════════════════════════════════════════════════════
-function EditorEmpty({ kind, onAdd }) {
+function EditorEmpty({ icon, label, onAdd }) {
   return (
     <div style={{ display: 'grid', placeItems: 'center', height: '100%', background: 'var(--bg)' }}>
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, maxWidth: 320 }}>
         <div style={{ width: 56, height: 56, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--muted)' }}>
-          <Icon name={kind} size={26} />
+          <Icon name={icon} size={26} />
         </div>
         <div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>No {kind}s yet</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Create your first {kind} to get started.</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>No {label}s yet</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Create your first {label} to get started.</div>
         </div>
-        <button className="btn primary" onClick={onAdd}><Icon name="plus" size={13} /> New {kind}</button>
+        <button className="btn primary" onClick={onAdd}><Icon name="plus" size={13} /> New {label}</button>
       </div>
     </div>
   )

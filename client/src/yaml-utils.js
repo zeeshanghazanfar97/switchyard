@@ -4,6 +4,11 @@
 
 const INDENT = '  '
 
+// Fences for the commented-out block of disabled routers/services.
+// Must match server/yamlStore.js.
+const DISABLED_START = '# --- switchyard:disabled (managed by Switchyard — do not edit) ---'
+const DISABLED_END = '# --- switchyard:end ---'
+
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v)
 }
@@ -57,74 +62,79 @@ function stringify(value, depth = 0) {
   }).join('\n')
 }
 
-function buildFullConfig(state) {
-  const out = { http: {} }
+function serviceBody(s) {
+  const lb = {}
+  if (s.serversTransport) lb.serversTransport = s.serversTransport
+  if (s.passHostHeader != null) lb.passHostHeader = s.passHostHeader
+  lb.servers = s.servers
+  if (s.sticky) lb.sticky = typeof s.sticky === 'object' ? s.sticky : { cookie: {} }
+  return { [s.type]: lb }
+}
 
-  if (state.routers.length) {
-    out.http.routers = {}
-    for (const r of state.routers) {
-      const node = {
-        rule: r.rule,
-        entryPoints: r.entryPoints,
-        service: r.service,
-      }
-      if (r.middlewares && r.middlewares.length) node.middlewares = r.middlewares
-      if (r.priority != null) node.priority = r.priority
-      if (r.tls) node.tls = r.tls
-      out.http.routers[r.name] = node
-    }
+function routerBody(r) {
+  const node = { rule: r.rule, entryPoints: r.entryPoints, service: r.service }
+  if (r.middlewares && r.middlewares.length) node.middlewares = r.middlewares
+  if (r.priority != null) node.priority = r.priority
+  if (r.tls) node.tls = r.tls
+  return node
+}
+
+// Assembles the `http` object from a set of routers/services and the full
+// middleware + transport collections.
+function buildHttp(routers, services, middlewares, serversTransports) {
+  const http = {}
+  if (routers.length) {
+    http.routers = {}
+    for (const r of routers) http.routers[r.name] = routerBody(r)
   }
-  if (state.services.length) {
-    out.http.services = {}
-    for (const s of state.services) {
-      out.http.services[s.name] = {
-        [s.type]: {
-          servers: s.servers,
-          ...(s.passHostHeader != null ? { passHostHeader: s.passHostHeader } : {}),
-          ...(s.sticky ? { sticky: typeof s.sticky === 'object' ? s.sticky : { cookie: {} } } : {}),
-        },
-      }
-    }
+  if (services.length) {
+    http.services = {}
+    for (const s of services) http.services[s.name] = serviceBody(s)
   }
-  if (state.middlewares.length) {
-    out.http.middlewares = {}
-    for (const m of state.middlewares) {
-      out.http.middlewares[m.name] = { [m.type]: m.config }
-    }
+  if (middlewares && middlewares.length) {
+    http.middlewares = {}
+    for (const m of middlewares) http.middlewares[m.name] = { [m.type]: m.config }
   }
-  return stringify(out, 0)
+  if (serversTransports && serversTransports.length) {
+    http.serversTransports = {}
+    for (const st of serversTransports) http.serversTransports[st.name] = st.config || {}
+  }
+  return http
+}
+
+function buildFullConfig(state) {
+  const enabledRouters = state.routers.filter((r) => r.enabled !== false)
+  const enabledServices = state.services.filter((s) => s.enabled !== false)
+  const disabledRouters = state.routers.filter((r) => r.enabled === false)
+  const disabledServices = state.services.filter((s) => s.enabled === false)
+
+  let text = stringify({
+    http: buildHttp(enabledRouters, enabledServices, state.middlewares, state.serversTransports),
+  }, 0)
+
+  if (disabledRouters.length || disabledServices.length) {
+    const frag = buildHttp(disabledRouters, disabledServices, [], [])
+    const commented = stringify(frag, 0).split('\n')
+      .map((l) => (l.length ? `# ${l}` : '#')).join('\n')
+    text += `\n\n${DISABLED_START}\n${commented}\n${DISABLED_END}\n`
+  }
+  return text
 }
 
 function buildRouterSnippet(r) {
-  const node = {
-    [r.name]: {
-      rule: r.rule,
-      entryPoints: r.entryPoints,
-      service: r.service,
-      ...(r.middlewares && r.middlewares.length ? { middlewares: r.middlewares } : {}),
-      ...(r.priority != null ? { priority: r.priority } : {}),
-      ...(r.tls ? { tls: r.tls } : {}),
-    },
-  }
-  return stringify(node, 0)
+  return stringify({ [r.name]: routerBody(r) }, 0)
 }
 
 function buildServiceSnippet(s) {
-  const node = {
-    [s.name]: {
-      [s.type]: {
-        servers: s.servers,
-        ...(s.passHostHeader != null ? { passHostHeader: s.passHostHeader } : {}),
-        ...(s.sticky ? { sticky: typeof s.sticky === 'object' ? s.sticky : { cookie: {} } } : {}),
-      },
-    },
-  }
-  return stringify(node, 0)
+  return stringify({ [s.name]: serviceBody(s) }, 0)
 }
 
 function buildMiddlewareSnippet(m) {
-  const node = { [m.name]: { [m.type]: m.config } }
-  return stringify(node, 0)
+  return stringify({ [m.name]: { [m.type]: m.config } }, 0)
+}
+
+function buildTransportSnippet(st) {
+  return stringify({ [st.name]: st.config || {} }, 0)
 }
 
 export const Yaml = {
@@ -133,6 +143,7 @@ export const Yaml = {
   buildRouterSnippet,
   buildServiceSnippet,
   buildMiddlewareSnippet,
+  buildTransportSnippet,
 }
 
 // Human-readable relative time. Returns "never" for a missing timestamp.

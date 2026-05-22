@@ -55,7 +55,7 @@ export function ListPane({ title, count, search, setSearch, onAdd, addLabel, chi
   )
 }
 
-export function ListRow({ active, onClick, icon, label, sub, status, accessory, draggable, onDragStart, onDragEnd, isDragging }) {
+export function ListRow({ active, onClick, icon, label, sub, status, accessory, draggable, onDragStart, onDragEnd, isDragging, dimmed }) {
   return (
     <button
       onClick={onClick}
@@ -66,7 +66,7 @@ export function ListRow({ active, onClick, icon, label, sub, status, accessory, 
         ...sp.row,
         background: active ? 'var(--accent-soft)' : 'transparent',
         borderColor: active ? 'var(--accent-line)' : 'transparent',
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.4 : dimmed ? 0.5 : 1,
         cursor: draggable ? 'grab' : 'pointer',
       }}
     >
@@ -114,21 +114,24 @@ export function EditorShell({ kind, name, namePill, breadcrumbs, actions, childr
 
       {validationIssues.length > 0 && (
         <div style={sp.issues}>
-          {validationIssues.map((iss, i) => (
-            <div key={i} style={{
-              ...sp.issue,
-              color: iss.level === 'error' ? 'var(--bad)' : 'var(--warn)',
-              background: iss.level === 'error' ? 'var(--bad-soft)' : 'var(--warn-soft)',
-            }}>
-              <Icon name={iss.level === 'error' ? 'alert' : 'info'} size={13} />
-              <span>{iss.message}</span>
-              {iss.action && (
-                <button className="btn sm ghost" onClick={iss.action.onClick} style={{ marginLeft: 'auto', color: 'inherit' }}>
-                  {iss.action.label} →
-                </button>
-              )}
-            </div>
-          ))}
+          {validationIssues.map((iss, i) => {
+            const tone = iss.level === 'error' ? 'bad' : iss.level === 'info' ? 'info' : 'warn'
+            return (
+              <div key={i} style={{
+                ...sp.issue,
+                color: `var(--${tone})`,
+                background: `var(--${tone}-soft)`,
+              }}>
+                <Icon name={iss.level === 'error' ? 'alert' : 'info'} size={13} />
+                <span>{iss.message}</span>
+                {iss.action && (
+                  <button className="btn sm ghost" onClick={iss.action.onClick} style={{ marginLeft: 'auto', color: 'inherit' }}>
+                    {iss.action.label} →
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -271,6 +274,12 @@ export function colorizeYaml(src) {
     } else if (body === '-') {
       parts.push(<span key="d" style={{ color: 'var(--muted)' }}>-</span>)
       body = ''
+    }
+
+    // Comment line — render muted.
+    if (body.startsWith('#')) {
+      parts.push(<span key="cmt" style={{ color: 'var(--faint)' }}>{body}</span>)
+      return <div key={i} style={{ minHeight: '1.55em' }}>{parts}</div>
     }
 
     // key: value

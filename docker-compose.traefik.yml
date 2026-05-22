@@ -1,0 +1,36 @@
+# Traefik overlay for Switchyard — runs the container behind a Traefik proxy.
+#
+# Enable it by setting in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml
+# then deploy as usual (docker compose up -d). Compose loads both files. This
+# overlay:
+#   - registers the container with Traefik via Docker labels
+#   - attaches it to the shared, external Traefik network
+#   - removes the published host port, so Switchyard is reachable ONLY through
+#     Traefik (no bypassing the proxy's TLS / auth)
+#
+# Label values are taken from .env — see the Traefik section of .env.example.
+
+services:
+  switchyard:
+    # Reachable only through Traefik: drop the host port published by the
+    # base compose file (Traefik connects over the Docker network instead).
+    ports: !reset []
+
+    networks:
+      - default
+      - traefik
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}"
+      - "traefik.http.routers.switchyard.rule=Host(`${SWITCHYARD_HOST:?set SWITCHYARD_HOST in .env}`)"
+      - "traefik.http.routers.switchyard.entrypoints=${TRAEFIK_ENTRYPOINTS:-websecure}"
+      - "traefik.http.routers.switchyard.tls.certresolver=${TRAEFIK_CERTRESOLVER:-}"
+      - "traefik.http.services.switchyard.loadbalancer.server.port=8080"
+
+networks:
+  # Existing external network shared with your Traefik instance.
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik-public}
+    external: true

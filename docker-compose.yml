@@ -6,9 +6,9 @@
 #   open http://localhost:8080
 #
 # Behind Traefik:
-#   In .env set TRAEFIK_ENABLE=true plus TRAEFIK_NETWORK, SWITCHYARD_HOST,
-#   TRAEFIK_ENTRYPOINTS, TRAEFIK_CERTRESOLVER (and SECURE_COOKIES=true for TLS),
-#   then deploy the same way. The Traefik labels below are filled in from .env.
+#   Uncomment COMPOSE_FILE in .env to load the docker-compose.traefik.yml
+#   overlay — it registers the container with Traefik and removes the published
+#   host port. Then deploy the same way. See .env.example.
 
 services:
   switchyard:
@@ -26,8 +26,8 @@ services:
       PORT: "8080"
       TRAEFIK_DYNAMIC_FILE: /data/dynamic.yml
 
-    # Host port (.env PORT, default 8080) -> container 8080. When Switchyard is
-    # reached only through Traefik, you may comment this out.
+    # Publishes Switchyard on the host (.env PORT, default 8080). The Traefik
+    # overlay removes this so the container is reachable only through Traefik.
     ports:
       - "${PORT:-8080}:8080"
 
@@ -37,31 +37,6 @@ services:
     volumes:
       - ${TRAEFIK_DYNAMIC_DIR:-./data}:/data
 
-    networks:
-      - default
-      - traefik
-
-    # Traefik reverse-proxy registration. Every value is taken from .env, so the
-    # routing is configured before deployment without editing this file. When
-    # TRAEFIK_ENABLE is not "true", Traefik ignores every label below.
-    labels:
-      - "traefik.enable=${TRAEFIK_ENABLE:-false}"
-      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}"
-      - "traefik.http.routers.switchyard.rule=Host(`${SWITCHYARD_HOST:-switchyard.example.com}`)"
-      - "traefik.http.routers.switchyard.entrypoints=${TRAEFIK_ENTRYPOINTS:-websecure}"
-      - "traefik.http.routers.switchyard.tls.certresolver=${TRAEFIK_CERTRESOLVER:-}"
-      - "traefik.http.services.switchyard.loadbalancer.server.port=8080"
-
     # Runs as root by default so it can write root-owned Traefik config files.
     # To drop privileges, uncomment and ensure /data is writable by that uid:gid.
     # user: "1000:1000"
-
-networks:
-  # The container's own bridge network — outbound traffic and health checks.
-  default:
-  # Network shared with Traefik. With TRAEFIK_ENABLE=true this must already
-  # exist as an external network named ${TRAEFIK_NETWORK}; with TRAEFIK_ENABLE=
-  # false, Compose just creates a local network of that name.
-  traefik:
-    name: ${TRAEFIK_NETWORK:-traefik-public}
-    external: ${TRAEFIK_ENABLE:-false}

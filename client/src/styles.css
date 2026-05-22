@@ -1,0 +1,229 @@
+/* Switchyard — Traefik dynamic config editor
+   Design tokens: dark by default with light variant. Cyan accent.
+   Dense IDE aesthetic; monospace for values + identifiers. */
+
+:root, [data-theme="dark"] {
+  --bg: #0a0e14;
+  --bg-pattern: #0c1219;
+  --panel: #10161f;
+  --panel-2: #131a25;
+  --elevated: #1a222e;
+  --hover: #1d2734;
+  --border: #1e2632;
+  --border-strong: #2a3543;
+  --border-focus: #06b6d4;
+
+  --text: #e6edf3;
+  --text-2: #c2cbd6;
+  --muted: #7c8aa0;
+  --faint: #4d5a6d;
+
+  --accent: #06b6d4;
+  --accent-2: #22d3ee;
+  --accent-soft: rgba(6,182,212,0.13);
+  --accent-line: rgba(6,182,212,0.4);
+
+  --ok: #22c55e;
+  --ok-soft: rgba(34,197,94,0.13);
+  --warn: #f59e0b;
+  --warn-soft: rgba(245,158,11,0.13);
+  --bad: #ef4444;
+  --bad-soft: rgba(239,68,68,0.13);
+  --info: #818cf8;
+  --info-soft: rgba(129,140,248,0.13);
+
+  --shadow-lg: 0 24px 60px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-pop: 0 8px 24px -8px rgba(0,0,0,0.5);
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f7f8fa;
+  --bg-pattern: #f0f2f6;
+  --panel: #ffffff;
+  --panel-2: #fafbfc;
+  --elevated: #ffffff;
+  --hover: #f1f3f7;
+  --border: #e5e8ee;
+  --border-strong: #d1d6df;
+  --border-focus: #0891b2;
+
+  --text: #0e1420;
+  --text-2: #29303e;
+  --muted: #5e6a7d;
+  --faint: #9aa3b3;
+
+  --accent: #0891b2;
+  --accent-2: #06b6d4;
+  --accent-soft: rgba(8,145,178,0.10);
+  --accent-line: rgba(8,145,178,0.35);
+
+  --ok: #16a34a;
+  --ok-soft: rgba(22,163,74,0.10);
+  --warn: #d97706;
+  --warn-soft: rgba(217,119,6,0.10);
+  --bad: #dc2626;
+  --bad-soft: rgba(220,38,38,0.10);
+  --info: #6366f1;
+  --info-soft: rgba(99,102,241,0.10);
+
+  --shadow-lg: 0 24px 60px -12px rgba(15,20,30,0.18), 0 0 0 1px rgba(15,20,30,0.04);
+  --shadow-pop: 0 8px 24px -8px rgba(15,20,30,0.15);
+
+  color-scheme: light;
+}
+
+/* Density */
+:root { --row-h: 36px; --pad-y: 12px; --pad-x: 16px; --gap: 12px; --font-ui: 13px; --font-mono: 12.5px; }
+[data-density="compact"] { --row-h: 28px; --pad-y: 8px; --pad-x: 12px; --gap: 8px; --font-ui: 12px; --font-mono: 11.5px; }
+
+/* Font family swap */
+:root { --f-ui: "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; --f-mono: "Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+[data-font-pair="mono-headings"] { --f-ui: "Geist", system-ui, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, monospace; }
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--font-ui)/1.45 var(--f-ui);
+  font-feature-settings: "ss01", "cv11", "ss03";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.005em;
+  overflow: hidden;
+}
+
+button { font-family: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; }
+
+/* Selection */
+::selection { background: var(--accent-soft); color: var(--text); }
+
+/* Scrollbars */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); border: 2px solid transparent; background-clip: content-box; }
+
+/* Mono helpers */
+.mono { font-family: var(--f-mono); font-size: var(--font-mono); letter-spacing: 0; }
+.kbd {
+  font-family: var(--f-mono); font-size: 11px;
+  padding: 1px 6px; border: 1px solid var(--border-strong);
+  border-bottom-width: 2px; border-radius: 4px;
+  background: var(--panel-2); color: var(--text-2);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: var(--row-h); padding: 0 12px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  font-size: var(--font-ui); font-weight: 500;
+  white-space: nowrap; flex-shrink: 0;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.btn:hover { background: var(--hover); border-color: var(--muted); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn.primary {
+  background: var(--accent); color: #001218;
+  border-color: transparent;
+}
+.btn.primary:hover { background: var(--accent-2); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn.ghost:hover { background: var(--hover); color: var(--text); }
+.btn.danger { color: var(--bad); }
+.btn.danger:hover { background: var(--bad-soft); border-color: var(--bad); }
+.btn.sm { height: 26px; padding: 0 10px; font-size: 12px; border-radius: 5px; }
+.btn.icon { padding: 0; width: var(--row-h); justify-content: center; }
+.btn.icon.sm { width: 26px; }
+
+/* Inputs */
+.input, .textarea, .select {
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 10px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: var(--font-ui);
+  outline: none;
+  transition: border-color .12s, box-shadow .12s, background .12s;
+}
+.input.mono { font-family: var(--f-mono); font-size: var(--font-mono); }
+.input:focus, .textarea:focus, .select:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.textarea {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 100px;
+  font-family: var(--f-mono);
+  font-size: var(--font-mono);
+  line-height: 1.55;
+}
+.input::placeholder, .textarea::placeholder { color: var(--faint); }
+
+/* Field rows */
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.field-hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.field-error { font-size: 11.5px; color: var(--bad); display: flex; align-items: center; gap: 6px; }
+
+/* Pills / badges */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 20px; padding: 0 7px;
+  border-radius: 4px; font-size: 11px; font-weight: 500;
+  font-family: var(--f-mono); letter-spacing: 0;
+  background: var(--panel-2); color: var(--text-2);
+  border: 1px solid var(--border);
+  white-space: nowrap; flex-shrink: 0;
+}
+.pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.pill.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.pill.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* Card */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Divider */
+.hr { height: 1px; background: var(--border); border: 0; margin: 0; }
+
+/* Empty state */
+.empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 48px 24px; color: var(--muted); text-align: center;
+}
+
+/* Animations */
+@keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-up { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pulse-dot { 0%, 100% { box-shadow: 0 0 0 0 currentColor; } 50% { box-shadow: 0 0 0 4px transparent; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.fade-in { animation: fade .18s ease-out; }
+.pop-in { animation: pop .14s cubic-bezier(.3,.7,.4,1.2); }
+
+/* Focus ring (a11y) */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.btn:focus-visible, .input:focus-visible, .textarea:focus-visible { outline: none; }
+
+/* Tooltip-ish */
+[data-tip] { position: relative; }

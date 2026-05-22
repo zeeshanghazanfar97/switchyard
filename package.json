@@ -1,0 +1,25 @@
+{
+  "name": "switchyard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Switchyard — a web editor for Traefik dynamic configuration files.",
+  "workspaces": [
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "npm run dev --workspace client",
+    "build": "npm run build --workspace client",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "cookie-session": "^2.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

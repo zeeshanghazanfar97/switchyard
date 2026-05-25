@@ -9,7 +9,7 @@
 #   - removes the published host port, so Switchyard is reachable ONLY through
 #     Traefik (no bypassing the proxy's TLS / auth)
 #
-# Label values are taken from .env — see the Traefik section of .env.example.
+# Label values are taken from .env — see the Traefik section of .env.example. 
 
 services:
   switchyard:
